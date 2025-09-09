@@ -1,0 +1,154 @@
+###############################################
+# Fake Data Generator – Logical Data Schema   #
+###############################################
+
+Overview:
+Three entity tables are generated independently in memory (lists of dicts) and written to CSV, then loaded into DuckDB using CREATE OR REPLACE TABLE ... AS SELECT * FROM read_csv_auto().
+Relationships are enforced logically (by using generated ids) but NOT via explicit FOREIGN KEY constraints in DuckDB (DuckDB currently ignores FK constraints). This document standardizes column names, data types, semantics, and provides multiple diagram specs so you can regenerate schema.png.
+
+Environment Variable:
+	NUM_RECORDS (int, default 1000) – number of rows per table.
+
+TABLE: user_profiles
+	sno               INT         (sequential 1..NUM_RECORDS; stable row number)
+	user_id           VARCHAR PK  (faker.uuid4())
+	fullname          VARCHAR     (faker.name())
+	username          VARCHAR     (faker.user_name())
+	email             VARCHAR     (faker.email())
+	address           VARCHAR     (faker.address(); may contain newlines)
+	phone_number      VARCHAR     (faker.phone_number())
+	dob               DATE        (faker.date_of_birth())
+	created_at        TIMESTAMP   (faker.date_time_this_decade())
+	location          VARCHAR     (faker.city())
+
+TABLE: products
+	product_id        VARCHAR PK  (faker.uuid4())
+	product_name      VARCHAR     (faker.word().capitalize())
+	category          VARCHAR     (random choice: Electronics|Clothing|Books|Toys)
+	price             DECIMAL(10,2) (random.uniform(10,1000))
+	stock             INTEGER     (random.randint(0,500))
+	description       VARCHAR     (faker.text(<=200 chars))
+	created_at        TIMESTAMP   (faker.date_time_this_year())
+
+TABLE: transactions
+	transaction_id    VARCHAR PK  (faker.uuid4())
+	user_id           VARCHAR     (chosen from user_profiles.user_id)
+	product_id        VARCHAR     (chosen from products.product_id)
+	amount            DECIMAL(12,2) (random.uniform(10,10000))
+	transaction_type  VARCHAR     (Credit|Debit)
+	date              TIMESTAMP   (faker.date_time_this_year())
+	description       VARCHAR     (faker.sentence(6 words))
+
+Logical Relationships:
+	transactions.user_id   -> user_profiles.user_id (N:1)
+	transactions.product_id -> products.product_id (N:1)
+
+Notes / Data Quality Considerations:
+	- sno is not guaranteed unique; consider replacing with a sequential INT if a natural primary key is desired.
+	- address may include embedded newline characters; when consuming CSVs set quoting appropriately.
+	- No nulls are intentionally generated; all fields are populated.
+	- Duplicate usernames/emails are possible (Faker does not ensure uniqueness without unique provider); add sets if needed.
+	- Timestamps are naive (no timezone). Add UTC normalization if required.
+
+DuckDB Creation Pattern (as executed in script):
+	CREATE OR REPLACE TABLE <table_name> AS (
+		SELECT * FROM read_csv_auto('<name>.csv', delim=',', header=true)
+	);
+
+-----------------------------------------------
+ASCII Entity Diagram
+-----------------------------------------------
+	+------------------+        +------------------+        +------------------+
+	|  user_profiles   |        |    products      |        |   transactions   |
+	+------------------+        +------------------+        +------------------+
+	| user_id (PK)     |        | product_id (PK)  |   +----| transaction_id(PK)
+	| fullname         |        | product_name     |   |    | user_id  (FK) ---+
+	| username         |        | category         |   |    | product_id(FK) --+
+	| email            |        | price            |   |    | amount           |
+	| address          |        | stock            |   |    | transaction_type |
+	| phone_number     |        | description      |   |    | date             |
+	| dob              |        | created_at       |   |    | description      |
+	| created_at       |        +------------------+   |    +------------------+
+	| location         |                                 
+	| sno              | (aux)                           
+	+------------------+
+
+-----------------------------------------------
+Mermaid ER Diagram (copy into schema.mmd then render)
+-----------------------------------------------
+erDiagram
+	user_profiles {
+		VARCHAR user_id PK
+		DOUBLE sno
+		VARCHAR fullname
+		VARCHAR username
+		VARCHAR email
+		VARCHAR address
+		VARCHAR phone_number
+		DATE dob
+		TIMESTAMP created_at
+		VARCHAR location
+	}
+	products {
+		VARCHAR product_id PK
+		VARCHAR product_name
+		VARCHAR category
+		DECIMAL price
+		INTEGER stock
+		VARCHAR description
+		TIMESTAMP created_at
+	}
+	transactions {
+		VARCHAR transaction_id PK
+		VARCHAR user_id FK
+		VARCHAR product_id FK
+		DECIMAL amount
+		VARCHAR transaction_type
+		TIMESTAMP date
+		VARCHAR description
+	}
+	user_profiles ||--o{ transactions : has
+	products ||--o{ transactions : includes
+
+-----------------------------------------------
+dbdiagram.io DSL (copy/paste into https://dbdiagram.io)
+-----------------------------------------------
+Table user_profiles {
+	user_id varchar [pk]
+	sno double
+	fullname varchar
+	username varchar
+	email varchar
+	address varchar
+	phone_number varchar
+	dob date
+	created_at timestamp
+	location varchar
+}
+
+Table products {
+	product_id varchar [pk]
+	product_name varchar
+	category varchar
+	price decimal
+	stock int
+	description varchar
+	created_at timestamp
+}
+
+Table transactions {
+	transaction_id varchar [pk]
+	user_id varchar [ref: > user_profiles.user_id]
+	product_id varchar [ref: > products.product_id]
+	amount decimal
+	transaction_type varchar
+	date timestamp
+	description varchar
+}
+
+# To regenerate schema.png
+# Option 1 (Mermaid CLI): mmdc -i schema.mmd -o schema.png
+# Option 2 (dbdiagram.io): Export > PNG
+# Option 3 (Draw.io): Import dbdiagram output or redraw manually.
+
+Version: 2025-09-09

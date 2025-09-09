@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["generate_data", "clean_files"]
+
+[project]
+name = "sample-data-generator"
+version = "0.1.0"
+description = "A Python project to generate fake data for user profiles, products, and transactions."
+authors = [
+  { name="Raja Appapurapu", email="appapurapu@gmail.com" },
+  {name="Chandrasekar Aruru", email="Chandra.aruru@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas",
+    "Faker",
+    "duckdb"
+]
+
+[project.scripts]
+generate-data = "generate_data:main"
+clean-files = "clean_files:main"
